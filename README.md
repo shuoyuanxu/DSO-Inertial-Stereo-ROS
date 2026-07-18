@@ -1,9 +1,5 @@
-# Polytunnel Direct Visual(-Inertial) Odometry
-
-A ROS1 (noetic) direct sparse odometry suite for agricultural robots, developed and
-field-validated on a heavy row-crop tractor in a polytunnel (2048×1536 fisheye cameras
-@ 10 Hz, 200 Hz IMU, near-constant-velocity motion — one of the hardest regimes for
-visual-inertial scale estimation).
+# Direct Sparse(-Inertial) Odometry
+Vibe coded DSO ros wrapper with 4 mode: mono, mono inertial, stereo, stereo inertial
 
 Built on [VI-Stereo-DSO](https://github.com/RonaldSun/VI-Stereo-DSO) (included here as a
 patched fork — see [Upstream fixes](#upstream-fixes-in-vi-stereo-dso)), with a
@@ -34,12 +30,12 @@ independent executables in one package — build once, run either.
 One complete, standalone launch file per mode (each starts the node + RViz):
 
 ```bash
-roslaunch polytunnel_vio stereo.launch        # RECOMMENDED — metric, range-gated stereo
-roslaunch polytunnel_vio mono.launch          # pure vision, best shape, scale-free
-roslaunch polytunnel_vio mono_graph.launch    # mono + IMU loose fusion (gravity-aligned metric)
-roslaunch polytunnel_vio stereo_graph.launch  # stereo + IMU loose fusion (no scale state)
-roslaunch polytunnel_vio mono_imu.launch      # tightly-coupled VI  — marginal, not recommended
-roslaunch polytunnel_vio stereo_imu.launch    # tightly-coupled stereo-VI — not recommended
+roslaunch polytunnel_vio stereo.launch        
+roslaunch polytunnel_vio mono.launch          
+roslaunch polytunnel_vio mono_graph.launch    # mono + IMU loose fusion
+roslaunch polytunnel_vio stereo_graph.launch  # stereo + IMU loose fusion
+roslaunch polytunnel_vio mono_imu.launch      # tightly-coupled VI
+roslaunch polytunnel_vio stereo_imu.launch    # tightly-coupled stereo-VI
 
 # then, in another terminal:
 rosbag play easy_AprilAdd_tffix.bag
