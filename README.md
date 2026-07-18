@@ -1,5 +1,8 @@
-<img width="760" height="692" alt="stereo_showcase" src="https://github.com/user-attachments/assets/507fe0dd-4984-4f61-8775-f56bacfa6d48" />
+
 # Direct Sparse(-Inertial) Odometry
+
+<img width="760" height="692" alt="stereo_showcase" src="https://github.com/user-attachments/assets/507fe0dd-4984-4f61-8775-f56bacfa6d48" />
+
 Vibe coded DSO ros wrapper with: mono, mono inertial, stereo, stereo inertial, and GTSAM style VI fusion
 
 Built on [VI-Stereo-DSO](https://github.com/RonaldSun/VI-Stereo-DSO) (included here as a
@@ -17,7 +20,7 @@ DSO core library, the live odometry node, and the fusion node.
 | `include/` | the direct Stereo/VI-DSO **core** 
 | `src/vi_dso_node.cpp` | **(ours)** live ROS node with four modes (`mono`, `mono_imu`, `stereo`, `stereo_imu`), full RViz visualization, OKVIS-style init relaxations → executable `vi_dso_live` |
 | `src/dso_imu_graph_node.cpp` | **(ours)** GTSAM iSAM2 factor graph fusing mono DSO odometry with preintegrated IMU factors → executable `dso_imu_graph_node` |
-| `launch/` | `vi_dso.launch` (all four modes via `mode:=…`), `dso_imu_graph.launch` |
+| `launch/` | `vi_dso.launch` (all  modes via `mode:=…`), `dso_imu_graph.launch` |
 | `rviz/`, `calib/` | RViz layouts and calibration files (incl. `calib/polytunnel/source_calibration.yaml`, the original Kalibr calibration everything was derived from) |
 | `scripts/` | **(ours)** trajectory recorders + `eval_ate.py` (SE3 + Sim3 Umeyama ATE) |
 | `thirdparty/` | Sophus + sse2neon headers the core needs |
