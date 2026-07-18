@@ -1,4 +1,4 @@
-# Polytunnel Direct Visual(-Inertial) Odometry
+# Direct Sparse(-Inertial) Odometry
 Vibe coded DSO ros wrapper with 4 mode: mono, mono inertial, stereo, stereo inertial
 
 Built on [VI-Stereo-DSO](https://github.com/RonaldSun/VI-Stereo-DSO) (included here as a
