@@ -42,18 +42,36 @@ roslaunch polytunnel_vio stereo_imu.launch    # tightly-coupled stereo-VI
 rosbag play easy_AprilAdd_tffix.bag
 ```
 
-## Results (polytunnel sequence, tag-map ground truth, ~327 s)
+## Results (polytunnel sequence, tag-map ground truth, ~343 s)
 
-| System | SE3 ATE (metric) | Sim3 ATE (shape) | scale err |
-|---|---|---|---|
-| **ours: stereo (range-gated)** | **0.88 m** | **0.47 m** | **1.04** |
-| OpenVINS (mono-inertial) | 0.63 m | 0.61 m | 0.992 |
-| ORB-SLAM3 (mono-inertial) | 0.86 m | 0.80 m | 1.018 |
-| ours: mono (vision only) | — (scale-free) | 0.19 m | — |
-| ours: mono + IMU graph | (scale run-dependent) | 0.31 m | unreliable |
-| VINS-Fusion (stereo-inertial) | 3.19 m | 3.06 m | 1.050 |
-| ours: stereo (ungated) | 8.07 m | 6.86 m | 1.29 |
-| VINS-Fusion (mono-inertial) | 15.9 m | (diverged) | — |
+Every visual system evaluated with one script (`scripts/eval_all_visual.py`): nearest-neighbour
+timestamp association, Umeyama alignment, SE3 (metric, honest) and Sim3 (shape only) ATE.
+`coverage` = how much of the sequence the system actually tracked — a low-ATE result over
+25 % of the run is not comparable to one over 100 %.
+
+| System | Modality | SE3 ATE | Sim3 ATE | scale | coverage |
+|---|---|---|---|---|---|
+| **OURS mono** | mono | — scale-free | **0.23 m** | — | 66 % \* |
+| ORB-SLAM3 | mono | — scale-free | 0.31 m | — | 78 % |
+| DSO (upstream) | mono | — scale-free | 0.31 m | — | 98 % |
+| ORB-SLAM3 | stereo | 0.64 m | 0.52 m | 1.03 | 25 % |
+| OpenVINS | mono-inertial | **0.63 m** | 0.62 m | 0.99 | 100 % |
+| ORB-SLAM3 | mono-inertial | 0.86 m | 0.80 m | 1.02 | 99 % |
+| **OURS stereo (range-gated)** | stereo | **1.22 m** | **0.92 m** | **1.04** | **95 %** |
+| OURS stereo-inertial | stereo-inertial | 1.30 m | 0.97 m | 1.84 | 1 % |
+| VINS-Fusion | stereo-inertial | 3.19 m | 3.06 m | 1.05 | 100 % |
+| VINS-Fusion | mono-inertial | 15.9 m | 15.8 m | 0.89 | 100 % |
+| OURS mono-inertial | mono-inertial | 22.7 m | 21.3 m | 0.52 | 6 % |
+| OpenVINS | stereo-inertial | *diverged* | *diverged* | 0.00 | 100 % |
+| VINS-Fusion | stereo | *diverged* | *diverged* | 0.00 | 100 % |
+
+Reading it honestly: **OpenVINS mono-inertial is the most accurate metric system** (0.63 m,
+full coverage) and our range-gated stereo is competitive at 1.22 m / 95 % without using the
+IMU at all. **Our mono has the best trajectory *shape* of any system tested** (Sim3 0.23 m,
+beating both ORB-SLAM3 mono and upstream DSO at 0.31 m) — it just carries no metric scale.
+Two baselines fail outright on this sequence (OpenVINS stereo-inertial and VINS-Fusion
+stereo both diverge), and ORB-SLAM3 stereo's excellent 0.64 m covers only a quarter of
+the run before it loses tracking.
 
 **The winner is range-gated stereo, no IMU needed** (SE3 0.88 m, scale within 4 %),
 competitive with the feature-based leaders. The key fix: a 14 cm baseline cannot
@@ -66,6 +84,38 @@ Other notes: **mono alone has the best raw shape** (Sim3 0.19 m) but no metric s
 the **mono+IMU graph** gives good shape (0.31 m) but IMU-only scale is unreliable on
 constant-velocity motion; the tightly-coupled `*_imu` modes are marginal on this data
 (scale is weakly observable) and are not recommended.
+
+### Benchmark: accuracy vs robustness
+
+<!-- drag-drop readme_assets/benchmark.png here -->
+
+Accuracy alone is misleading on this sequence — several systems score well over a fraction
+of the run, and two diverge completely while still reporting "100 % coverage". Both axes
+matter.
+
+### Our four modes vs ground truth
+
+<!-- drag-drop readme_assets/mode_comparison.png here -->
+
+Note the axis scales: `mono_imu` wanders to ±90 m and `stereo_imu` collapses to a
+few-metre fragment, while `stereo` and `mono` trace the row pattern cleanly.
+
+| Mode | Resets | Longest continuous track | Coverage |
+|---|---|---|---|
+| **stereo** (range-gated) | **0** | **330 s** | **95 %** |
+| mono | 0 | 228 s | 66 % \* |
+| mono_imu (tight) | 6 | 20 s | 6 % |
+| stereo_imu (tight) | 569 | 4 s | 1 % |
+
+\* mono logged **zero** resets and zero tracking-loss events — it was still tracking when
+the bag ended. In synchronous mode it cannot process 10 Hz frames in real time, so it fell
+behind and was cut off. Play the bag with `--rate 0.5` to complete the run.
+
+The `*_imu` failures are not a tuning problem: on a near-constant-velocity vehicle the
+accelerometer sees almost nothing but gravity, so metric scale is weakly observable and the
+joint scale state drifts out of its trust region and resets. Stereo sidesteps this entirely
+— the baseline observes scale on every frame, no motion required. Notably the same regime
+breaks two of the baselines too (OpenVINS stereo-inertial, VINS-Fusion stereo).
 
 ## Build
 
