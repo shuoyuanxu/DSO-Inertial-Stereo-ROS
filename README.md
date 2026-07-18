@@ -85,42 +85,6 @@ Eigen3, Boost, SuiteSparse, glog.
 | `scale_rw_sigma` | 0.002 | scale random walk; larger values let scale chase IMU noise through unobservable stretches |
 | `odom_huber` | 1.345 | robust loss on odometry factors; disabling it measurably hurts |
 
-## Upstream fixes in VI-Stereo-DSO
-
-This tree fixes the following upstream bugs (all found on real data):
-
-1. **Heap buffer overflow in `CoarseTracker::trackNewestCoarse`** — `imu_track_w` was
-   sized `coarsestLvl` but 5 elements are always written; with image geometries that
-   yield 4 pyramid levels this smashed heap metadata **every frame**. (EuRoC's geometry
-   hid it in allocator slack — found with AddressSanitizer.)
-2. **Async mapping queue desync** — `deliverTrackedFrame` never pushed `fh_right` to
-   `unmappedTrackedFrames_right` (pop on empty deque = UB), and the catch-up path popped
-   only the left queue.
-3. **Unguarded IMU reads** in `EnergyFunctional::getIMUHessian`, the coarse tracker, and
-   `initFirstFrame_imu` — vision-only operation crashed; now guarded (enables `mono` /
-   `stereo` modes without IMU data).
-4. **Scale divergence handling** — scale steps are clamped (with configurable bounds)
-   instead of triggering full resets; non-finite optimizer states trigger clean resets
-   instead of `Sophus::ScaleNotPositive` aborts; stereo mode's hardcoded assumption that
-   the baseline pins scale to [0.6, 2] is now configurable (false for short-baseline
-   rigs observing far structure).
-5. GUI event-loop calls (`cv::waitKey`) no longer run when display is disabled.
-
-## Known issues / roadmap
-
-- **Graph scale bias (~25 %)**: keyframe-level assembly loses scale information relative
-  to full-rate tight coupling (OpenVINS recovers scale 0.99 from the same IMU). Raw
-  per-turn IMU ΔV forensics show the sensor stream is unbiased — first fix candidate is
-  denser keyframes during turns (0.5 s spans ~17° at turn rate).
-- **stereo_imu scale correction**: the tightly-coupled optimizer destabilizes on large
-  scale corrections (NaN → now a clean reset instead of a crash, but convergence through
-  the correction is unvalidated). `stereo_weight` reduction and the graph-based route
-  are workarounds.
-- Intermittent crash in the *async* mapping mode near resets (sync mode, the default, is
-  unaffected).
-- Sync+single-thread mode runs ~0.26× real time in `mono_imu`; use
-  `multithreading:=true linearize_operation:=false` (real-time) or slow the bag.
-
 ## This work builds directly on:
 
 - **DSO**
