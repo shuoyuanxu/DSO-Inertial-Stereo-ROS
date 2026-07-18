@@ -1,7 +1,7 @@
 
 # Direct Sparse(-Inertial) Odometry
 
-<img width="760" height="692" alt="stereo_showcase" src="https://github.com/user-attachments/assets/507fe0dd-4984-4f61-8775-f56bacfa6d48" />
+![stereo_showcase](https://github.com/user-attachments/assets/8d2158d1-db2c-4ce5-8e1e-cf124640d768)
 
 Vibe coded DSO ros wrapper with: mono, mono inertial, stereo, stereo inertial, and GTSAM style VI fusion
 
