@@ -20,11 +20,8 @@ DSO core library, the live odometry node, and the fusion node.
 | `include/` | the direct Stereo/VI-DSO **core** 
 | `src/vi_dso_node.cpp` | **(ours)** live ROS node with four modes (`mono`, `mono_imu`, `stereo`, `stereo_imu`), full RViz visualization, OKVIS-style init relaxations → executable `vi_dso_live` |
 | `src/dso_imu_graph_node.cpp` | **(ours)** GTSAM iSAM2 factor graph fusing mono DSO odometry with preintegrated IMU factors → executable `dso_imu_graph_node` |
-| `launch/` | `vi_dso.launch` (all  modes via `mode:=…`), `dso_imu_graph.launch` |
-| `rviz/`, `calib/` | RViz layouts and calibration files (incl. `calib/polytunnel/source_calibration.yaml`, the original Kalibr calibration everything was derived from) |
 | `scripts/` | **(ours)** trajectory recorders + `eval_ate.py` (SE3 + Sim3 Umeyama ATE) |
 | `thirdparty/` | Sophus + sse2neon headers the core needs |
-| `cmake/` | `Find*` modules for SuiteSparse / Glog |
 
 `vi_dso_live` links `dso_core`; `dso_imu_graph_node` links GTSAM. The two are
 independent executables in one package — build once, run either.
@@ -44,14 +41,6 @@ roslaunch polytunnel_vio stereo_imu.launch    # tightly-coupled stereo-VI
 # then, in another terminal:
 rosbag play easy_AprilAdd_tffix.bag
 ```
-
-(`vi_dso.launch` is the shared base the per-mode files include — you can also call it
-directly with `mode:=…` and `rviz_config:=…` if you want.)
-
-The launch file auto-starts RViz (`rviz:=false` to disable) showing the raw image, the
-keyframe image with selected points (colored by inverse depth), the sparse map, odometry
-and path. In the graph configuration the map is assembled from per-keyframe clouds using
-the *fused* (IMU-corrected, metric, gravity-aligned) poses.
 
 ## Results (polytunnel sequence, tag-map ground truth, ~327 s)
 
