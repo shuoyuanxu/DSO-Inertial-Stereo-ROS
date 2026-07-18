@@ -1,9 +1,5 @@
 # Polytunnel Direct Visual(-Inertial) Odometry
-
-A ROS1 (noetic) direct sparse odometry suite for agricultural robots, developed and
-field-validated on a heavy row-crop tractor in a polytunnel (2048×1536 fisheye cameras
-@ 10 Hz, 200 Hz IMU, near-constant-velocity motion — one of the hardest regimes for
-visual-inertial scale estimation).
+Vibe coded DSO ros wrapper with 4 mode: mono, mono inertial, stereo, stereo inertial
 
 Built on [VI-Stereo-DSO](https://github.com/RonaldSun/VI-Stereo-DSO) (included here as a
 patched fork — see [Upstream fixes](#upstream-fixes-in-vi-stereo-dso)), with a
