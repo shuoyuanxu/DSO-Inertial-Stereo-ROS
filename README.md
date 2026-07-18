@@ -1,6 +1,6 @@
 <img width="760" height="692" alt="stereo_showcase" src="https://github.com/user-attachments/assets/507fe0dd-4984-4f61-8775-f56bacfa6d48" />
 # Direct Sparse(-Inertial) Odometry
-Vibe coded DSO ros wrapper with 4 mode: mono, mono inertial, stereo, stereo inertial
+Vibe coded DSO ros wrapper with: mono, mono inertial, stereo, stereo inertial, and GTSAM style VI fusion
 
 Built on [VI-Stereo-DSO](https://github.com/RonaldSun/VI-Stereo-DSO) (included here as a
 patched fork — see [Upstream fixes](#upstream-fixes-in-vi-stereo-dso)), with a
@@ -14,7 +14,7 @@ DSO core library, the live odometry node, and the fusion node.
 
 | Path | What it is |
 |---|---|
-| `include/` | the direct Stereo/VI-DSO **core** (patched third-party DSO, GPLv3) — headers + sources, built into the internal `dso_core` static library. All our crash/scale fixes live here |
+| `include/` | the direct Stereo/VI-DSO **core** 
 | `src/vi_dso_node.cpp` | **(ours)** live ROS node with four modes (`mono`, `mono_imu`, `stereo`, `stereo_imu`), full RViz visualization, OKVIS-style init relaxations → executable `vi_dso_live` |
 | `src/dso_imu_graph_node.cpp` | **(ours)** GTSAM iSAM2 factor graph fusing mono DSO odometry with preintegrated IMU factors → executable `dso_imu_graph_node` |
 | `launch/` | `vi_dso.launch` (all four modes via `mode:=…`), `dso_imu_graph.launch` |
