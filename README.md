@@ -28,7 +28,7 @@ independent executables in one package — build once, run either.
 
 ## Modes
 
-One complete, standalone launch file per mode (each starts the node + RViz):
+One standalone launch file per mode (each starts the node + RViz):
 
 ```bash
 roslaunch polytunnel_vio stereo.launch        
@@ -39,15 +39,10 @@ roslaunch polytunnel_vio mono_imu.launch      # tightly-coupled VI
 roslaunch polytunnel_vio stereo_imu.launch    # tightly-coupled stereo-VI
 
 # then, in another terminal:
-rosbag play easy_AprilAdd_tffix.bag
+rosbag play your.bag
 ```
 
 ## Results (polytunnel sequence, tag-map ground truth, ~343 s)
-
-Every visual system evaluated with one script (`scripts/eval_all_visual.py`): nearest-neighbour
-timestamp association, Umeyama alignment, SE3 (metric, honest) and Sim3 (shape only) ATE.
-`coverage` = how much of the sequence the system actually tracked — a low-ATE result over
-25 % of the run is not comparable to one over 100 %.
 
 | System | Modality | SE3 ATE | Sim3 ATE | scale | coverage |
 |---|---|---|---|---|---|
@@ -65,74 +60,9 @@ timestamp association, Umeyama alignment, SE3 (metric, honest) and Sim3 (shape o
 | OpenVINS | stereo-inertial | *diverged* | *diverged* | 0.00 | 100 % |
 | VINS-Fusion | stereo | *diverged* | *diverged* | 0.00 | 100 % |
 
-Reading it honestly: **OpenVINS mono-inertial is the most accurate metric system** (0.63 m,
-full coverage) and our range-gated stereo is competitive at 1.22 m / 95 % without using the
-IMU at all. **Our mono has the best trajectory *shape* of any system tested** (Sim3 0.23 m,
-beating both ORB-SLAM3 mono and upstream DSO at 0.31 m) — it just carries no metric scale.
-Two baselines fail outright on this sequence (OpenVINS stereo-inertial and VINS-Fusion
-stereo both diverge), and ORB-SLAM3 stereo's excellent 0.64 m covers only a quarter of
-the run before it loses tracking.
+## Dependencies: 
 
-**The winner is range-gated stereo, no IMU needed** (SE3 0.88 m, scale within 4 %),
-competitive with the feature-based leaders. The key fix: a 14 cm baseline cannot
-triangulate far structure, and DSO was baking that garbage depth into the map. Dropping
-static-stereo points past ~12 m (`stereo_max_depth`) took stereo from Sim3 6.86 m → 0.47 m
-— a ~15× gain. Once stereo is clean, adding IMU fusion *hurts* (it only ever compensated
-for the broken depth), so the recommended metric config is plain `mode:=stereo`.
-
-Other notes: **mono alone has the best raw shape** (Sim3 0.19 m) but no metric scale;
-the **mono+IMU graph** gives good shape (0.31 m) but IMU-only scale is unreliable on
-constant-velocity motion; the tightly-coupled `*_imu` modes are marginal on this data
-(scale is weakly observable) and are not recommended.
-
-### Benchmark: accuracy vs robustness
-
-<!-- drag-drop readme_assets/benchmark.png here -->
-
-Accuracy alone is misleading on this sequence — several systems score well over a fraction
-of the run, and two diverge completely while still reporting "100 % coverage". Both axes
-matter.
-
-### Our four modes vs ground truth
-
-<!-- drag-drop readme_assets/mode_comparison.png here -->
-
-Note the axis scales: `mono_imu` wanders to ±90 m and `stereo_imu` collapses to a
-few-metre fragment, while `stereo` and `mono` trace the row pattern cleanly.
-
-| Mode | Resets | Longest continuous track | Coverage |
-|---|---|---|---|
-| **stereo** (range-gated) | **0** | **330 s** | **95 %** |
-| mono | 0 | 228 s | 66 % \* |
-| mono_imu (tight) | 6 | 20 s | 6 % |
-| stereo_imu (tight) | 569 | 4 s | 1 % |
-
-\* mono logged **zero** resets and zero tracking-loss events — it was still tracking when
-the bag ended. In synchronous mode it cannot process 10 Hz frames in real time, so it fell
-behind and was cut off. Play the bag with `--rate 0.5` to complete the run.
-
-The `*_imu` failures are not a tuning problem: on a near-constant-velocity vehicle the
-accelerometer sees almost nothing but gravity, so metric scale is weakly observable and the
-joint scale state drifts out of its trust region and resets. Stereo sidesteps this entirely
-— the baseline observes scale on every frame, no motion required. Notably the same regime
-breaks two of the baselines too (OpenVINS stereo-inertial, VINS-Fusion stereo).
-
-## Build
-
-Clone this repo into `<catkin_ws>/src/` and build the whole thing in one shot —
-the core library, both nodes, everything:
-
-```bash
-cd <catkin_ws>
-catkin_make -DCATKIN_WHITELIST_PACKAGES="polytunnel_vio"
-```
-
-The CMake handles the fiddly bits automatically: the core + `vi_dso_live` build
-with `-march=native` (Eigen SIMD), while `dso_imu_graph_node` builds without it and
-in C++17 (GTSAM's Eigen ABI), and OpenCV is pinned to the system version cv_bridge
-links against (mixing two OpenCVs in one process corrupts the heap).
-
-Dependencies: ROS noetic, Pangolin, GTSAM ≥ 4.2 (`CombinedImuFactor`), OpenCV (system),
+ROS noetic, Pangolin, GTSAM ≥ 4.2 (`CombinedImuFactor`), OpenCV (system),
 Eigen3, Boost, SuiteSparse, glog.
 
 ## Calibration inputs
@@ -143,7 +73,7 @@ Eigen3, Boost, SuiteSparse, glog.
   densities and random walks (Kalibr conventions)
 - `T_C0C1.txt` — 3×4 left←right stereo extrinsic
 
-## Key parameters (learned the hard way)
+## Key parameters 
 
 | Param | Default | Why |
 |---|---|---|
@@ -191,33 +121,19 @@ This tree fixes the following upstream bugs (all found on real data):
 - Sync+single-thread mode runs ~0.26× real time in `mono_imu`; use
   `multithreading:=true linearize_operation:=false` (real-time) or slow the bag.
 
-## Acknowledgements & citations
+## This work builds directly on:
 
-This work builds directly on:
-
-- **DSO** — J. Engel, V. Koltun, D. Cremers, *Direct Sparse Odometry*, IEEE TPAMI 2018.
+- **DSO**
   [github.com/JakobEngel/dso](https://github.com/JakobEngel/dso)
-- **Stereo DSO** — R. Wang, M. Schwörer, D. Cremers, *Stereo DSO: Large-Scale Direct
-  Sparse Visual Odometry with Stereo Cameras*, ICCV 2017.
-- **VI-DSO** — L. von Stumberg, V. Usenko, D. Cremers, *Direct Sparse Visual-Inertial
-  Odometry using Dynamic Marginalization*, ICRA 2018.
-- **VI-Stereo-DSO** — R. Sun's community implementation combining the above:
+- **VI-Stereo-DSO**
   [github.com/RonaldSun/VI-Stereo-DSO](https://github.com/RonaldSun/VI-Stereo-DSO)
   (included here in patched form, GPLv3)
-- **dso_ros** — J. Engel's ROS wrapper for DSO, the pattern our live wrapper follows:
+- **dso_ros**
   [github.com/JakobEngel/dso_ros](https://github.com/JakobEngel/dso_ros)
-- **GTSAM** — F. Dellaert et al., Georgia Tech Smoothing and Mapping library; IMU
-  preintegration after C. Forster, L. Carlone, F. Dellaert, D. Scaramuzza, *On-Manifold
-  Preintegration for Real-Time Visual-Inertial Odometry*, IEEE T-RO 2017.
+- **GTSAM** 
   [gtsam.org](https://gtsam.org)
-- **OKVIS2 / OKVIS2-X** — S. Leutenegger et al., whose estimator design (immediate
-  initialization without excitation gates, information-preserving marginalization,
-  physically-derived IMU weighting with config-level noise inflation, persistent bias
-  priors) guided the fusion layer and the initialization relaxations:
+- **OKVIS2 / OKVIS2-X**
   [github.com/smartroboticslab/okvis2](https://github.com/smartroboticslab/okvis2)
-
-Baselines referenced in the results table: OpenVINS (Geneva et al.), ORB-SLAM3 (Campos
-et al.), VINS-Fusion (Qin et al.).
 
 ## License
 
