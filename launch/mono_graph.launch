@@ -1,0 +1,20 @@
+<launch>
+  <!-- MONO + IMU GRAPH (loose GTSAM fusion). Good SHAPE (Sim3 ~0.3 m) with a
+       gravity-aligned metric output; metric scale from IMU is run-dependent on
+       constant-velocity motion. Complete & standalone: vi_dso(mono) + graph + RViz. -->
+  <include file="$(find polytunnel_vio)/launch/vi_dso.launch">
+    <arg name="mode" value="mono"/>
+    <arg name="rviz" value="false"/>
+  </include>
+
+  <node name="dso_imu_graph" pkg="polytunnel_vio" type="dso_imu_graph_node" output="screen">
+    <param name="imu_info"       value="$(find polytunnel_vio)/calib/polytunnel/IMU_info.txt"/>
+    <param name="dso_pose_topic" value="/vi_dso/pose"/>
+    <param name="imu_topic"      value="/ms/imu/data"/>
+    <param name="g_norm"         value="9.81"/>
+    <param name="kf_dt"          value="0.5"/>
+  </node>
+
+  <node name="rviz" pkg="rviz" type="rviz"
+        args="-d $(find polytunnel_vio)/rviz/graph.rviz"/>
+</launch>

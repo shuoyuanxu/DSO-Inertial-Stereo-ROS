@@ -1,0 +1,8 @@
+<launch>
+  <!-- MONO-INERTIAL (tightly coupled). NOTE: marginal on near-constant-velocity
+       motion — scale is weakly observable and the system reset-storms. For a
+       metric mono result prefer mono_graph.launch; for metric overall use stereo.launch. -->
+  <include file="$(find polytunnel_vio)/launch/vi_dso.launch">
+    <arg name="mode" value="mono_imu"/>
+  </include>
+</launch>

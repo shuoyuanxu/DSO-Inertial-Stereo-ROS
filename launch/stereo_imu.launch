@@ -1,0 +1,8 @@
+<launch>
+  <!-- STEREO-INERTIAL (tightly coupled). NOTE: not recommended — on this motion
+       the joint scale optimization is unstable (reset storms). Use stereo.launch
+       (gated stereo alone already gives the best metric result). -->
+  <include file="$(find polytunnel_vio)/launch/vi_dso.launch">
+    <arg name="mode" value="stereo_imu"/>
+  </include>
+</launch>

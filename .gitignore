@@ -1,0 +1,11 @@
+# run outputs
+*.npy
+*.log
+*.mp4
+data/
+result.txt
+
+# editor / os
+*.swp
+.vscode/
+.DS_Store

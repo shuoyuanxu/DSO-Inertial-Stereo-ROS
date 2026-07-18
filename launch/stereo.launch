@@ -1,0 +1,7 @@
+<launch>
+  <!-- STEREO — RECOMMENDED metric odometry. Range-gated static stereo
+       (SE3 ~1 m, scale within ~4%), clean, no IMU needed. -->
+  <include file="$(find polytunnel_vio)/launch/vi_dso.launch">
+    <arg name="mode" value="stereo"/>
+  </include>
+</launch>

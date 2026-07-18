@@ -1,0 +1,7 @@
+<launch>
+  <!-- MONO — pure visual DSO. Best trajectory SHAPE (Sim3 ~0.2 m), but scale-free
+       (no metric scale). Use when you'll align to another reference. -->
+  <include file="$(find polytunnel_vio)/launch/vi_dso.launch">
+    <arg name="mode" value="mono"/>
+  </include>
+</launch>

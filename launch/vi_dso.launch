@@ -1,0 +1,59 @@
+<launch>
+  <!-- Shared base for all modes. You normally launch a per-mode file
+       (mono.launch, stereo.launch, ...) which includes this with the right args.
+       Play data with:  rosbag play easy_AprilAdd_tffix.bag  -->
+
+  <!-- mode: mono | mono_imu | stereo | stereo_imu -->
+  <arg name="mode"  default="stereo"/>
+  <arg name="use_imu"    value="$(eval arg('mode') in ['mono_imu','stereo_imu'])"/>
+  <arg name="use_stereo" value="$(eval arg('mode') in ['stereo','stereo_imu'])"/>
+
+  <arg name="rviz"        default="true"/>
+  <arg name="rviz_config" default="$(find polytunnel_vio)/rviz/modes.rviz"/>
+  <arg name="nogui" default="true"/>  <!-- Pangolin viewer off by default; RViz covers visualization -->
+  <arg name="multithreading"      default="false"/>  <!-- true = faster, upstream-untested path (stable since heap fix) -->
+  <arg name="linearize_operation" default="true"/>   <!-- false = async mapping thread (real-time mode) -->
+  <arg name="carry_state"         default="true"/>   <!-- keep bias/scale estimates across re-inits -->
+
+  <node name="vi_dso" pkg="polytunnel_vio" type="vi_dso_live" output="screen">
+    <param name="use_imu"             value="$(arg use_imu)"/>
+    <param name="use_stereo"          value="$(arg use_stereo)"/>
+    <param name="carry_state"         value="$(arg carry_state)"/>
+    <param name="calib_right"         value="$(find polytunnel_vio)/calib/polytunnel/cam1.txt"/>
+    <param name="t_stereo"            value="$(find polytunnel_vio)/calib/polytunnel/T_C0C1.txt"/>
+    <param name="image_topic_right"   value="/forwardRight/image_raw/compressed"/>
+    <!-- reject static-stereo depth past this range (m): a 14 cm baseline can't
+         triangulate far structure, and the noisy depth wrecks the reconstruction.
+         12 m verified best on the polytunnel (Sim3 6.86 m -> 0.47 m). -->
+    <param name="stereo_max_depth"    value="12.0"/>
+    <param name="multithreading"      value="$(arg multithreading)"/>
+    <param name="linearize_operation" value="$(arg linearize_operation)"/>
+    <param name="calib"     value="$(find polytunnel_vio)/calib/polytunnel/cam0.txt"/>
+    <param name="imu_info"  value="$(find polytunnel_vio)/calib/polytunnel/IMU_info.txt"/>
+
+    <param name="image_topic"    value="/forwardLeft/image_raw/compressed"/>
+    <param name="use_compressed" value="true"/>
+    <param name="imu_topic"      value="/ms/imu/data"/>
+
+    <!-- Kalibr: t_imu = t_cam + timeshift (from calibration.yaml) -->
+    <param name="timeshift_cam_imu" value="0.009160379134269684"/>
+
+    <!-- OKVIS-style: vision leads, IMU assists; scale converges online.
+         (upstream EuRoC values were 6.0 / 0.6 with slack 1 and bounds 0.1-10) -->
+    <param name="imu_weight"         value="1.0"/>  <!-- OKVIS uses physically-derived covariances = weight 1 -->
+    <param name="imu_weight_tracker" value="0.2"/>
+    <param name="init_slack"         value="3.0"/>
+    <param name="scale_reset_low"    value="0.02"/>
+    <param name="scale_reset_high"   value="50.0"/>
+    <!-- persistent priors on weakly-observable states (OKVIS-style); 0 = off (upstream) -->
+    <param name="init_ba_hessian"    value="0.25"/>
+    <param name="init_bg_hessian"    value="1.0"/>
+    <param name="init_scale_hessian" value="10.0"/>
+
+    <param name="g_norm" value="9.81"/>
+    <param name="nogui"  value="$(arg nogui)"/>
+  </node>
+
+  <node if="$(arg rviz)" name="rviz" pkg="rviz" type="rviz"
+        args="-d $(arg rviz_config)"/>
+</launch>

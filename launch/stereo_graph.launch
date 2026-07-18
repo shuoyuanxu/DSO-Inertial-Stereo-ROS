@@ -1,0 +1,21 @@
+<launch>
+  <!-- STEREO + IMU GRAPH (loose GTSAM fusion, metric_input: no scale state).
+       Stereo is already metric, so the graph carries no scale variable and the
+       robust loss rejects far-structure dropouts. Complete & standalone. -->
+  <include file="$(find polytunnel_vio)/launch/vi_dso.launch">
+    <arg name="mode" value="stereo"/>
+    <arg name="rviz" value="false"/>
+  </include>
+
+  <node name="dso_imu_graph" pkg="polytunnel_vio" type="dso_imu_graph_node" output="screen">
+    <param name="imu_info"       value="$(find polytunnel_vio)/calib/polytunnel/IMU_info.txt"/>
+    <param name="dso_pose_topic" value="/vi_dso/pose"/>
+    <param name="imu_topic"      value="/ms/imu/data"/>
+    <param name="metric_input"   value="true"/>
+    <param name="g_norm"         value="9.81"/>
+    <param name="kf_dt"          value="0.5"/>
+  </node>
+
+  <node name="rviz" pkg="rviz" type="rviz"
+        args="-d $(find polytunnel_vio)/rviz/graph.rviz"/>
+</launch>
