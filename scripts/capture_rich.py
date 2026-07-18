@@ -10,9 +10,10 @@ OUT = sys.argv[1]           # output dir for this mode
 IMG_TOPIC   = sys.argv[2] if len(sys.argv) > 2 else "/vi_dso/image_points"
 CLOUD_TOPIC = sys.argv[3] if len(sys.argv) > 3 else "/vi_dso/cloud"
 PATH_TOPIC  = sys.argv[4] if len(sys.argv) > 4 else "/vi_dso/path"
+RAW_TOPIC   = sys.argv[5] if len(sys.argv) > 5 else "/vi_dso/image_raw"
 os.makedirs(OUT, exist_ok=True)
 lock = threading.Lock()
-state = {"img": None, "cloud": None, "path": None}
+state = {"img": None, "cloud": None, "path": None, "raw": None}
 frames = []                 # list of (t, img_png_idx, cloud_idx)
 img_count = [0]
 
@@ -21,6 +22,16 @@ def img_cb(m):
     a = np.frombuffer(m.data, np.uint8).reshape(m.height, m.width, 3)
     if m.encoding == "bgr8": a = a[:, :, ::-1]
     with lock: state["img"] = (m.header.stamp.to_sec(), a.copy())
+
+def raw_cb(m):
+    if m.encoding == "mono8":
+        a = np.frombuffer(m.data, np.uint8).reshape(m.height, m.width)
+    elif m.encoding in ("bgr8", "rgb8"):
+        a = np.frombuffer(m.data, np.uint8).reshape(m.height, m.width, 3)
+        if m.encoding == "bgr8": a = a[:, :, ::-1]
+    else:
+        return
+    with lock: state["raw"] = a.copy()
 
 def cloud_cb(m):
     if m.point_step < 12: return
@@ -38,13 +49,15 @@ def snap(_):
         img = state["img"][1]
         cloud = state["cloud"][1] if state["cloud"] else np.zeros((0, 3))
         path = state["path"] if state["path"] is not None else np.zeros((0, 3))
+        raw = state["raw"] if state["raw"] is not None else np.zeros((0, 0), np.uint8)
     i = img_count[0]; img_count[0] += 1
-    np.savez_compressed(f"{OUT}/frame_{i:04d}.npz", t=t, img=img, cloud=cloud, path=path)
+    np.savez_compressed(f"{OUT}/frame_{i:04d}.npz", t=t, img=img, cloud=cloud, path=path, raw=raw)
 
 rospy.init_node("rich_capture", anonymous=True)
 rospy.Subscriber(IMG_TOPIC, Image, img_cb, queue_size=2)
 rospy.Subscriber(CLOUD_TOPIC, PointCloud2, cloud_cb, queue_size=2)
 rospy.Subscriber(PATH_TOPIC, Path, path_cb, queue_size=2)
+rospy.Subscriber(RAW_TOPIC, Image, raw_cb, queue_size=2)
 rospy.Timer(rospy.Duration(0.4), snap)   # ~2.5 fps capture
 rospy.spin()
 print("captured", img_count[0], "frames to", OUT)
