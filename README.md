@@ -1,3 +1,4 @@
+<img width="760" height="692" alt="stereo_showcase" src="https://github.com/user-attachments/assets/507fe0dd-4984-4f61-8775-f56bacfa6d48" />
 # Direct Sparse(-Inertial) Odometry
 Vibe coded DSO ros wrapper with 4 mode: mono, mono inertial, stereo, stereo inertial
 
