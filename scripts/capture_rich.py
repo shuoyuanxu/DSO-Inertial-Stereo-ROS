@@ -7,6 +7,9 @@ from sensor_msgs.msg import Image, PointCloud2
 from nav_msgs.msg import Path
 
 OUT = sys.argv[1]           # output dir for this mode
+IMG_TOPIC   = sys.argv[2] if len(sys.argv) > 2 else "/vi_dso/image_points"
+CLOUD_TOPIC = sys.argv[3] if len(sys.argv) > 3 else "/vi_dso/cloud"
+PATH_TOPIC  = sys.argv[4] if len(sys.argv) > 4 else "/vi_dso/path"
 os.makedirs(OUT, exist_ok=True)
 lock = threading.Lock()
 state = {"img": None, "cloud": None, "path": None}
@@ -39,9 +42,9 @@ def snap(_):
     np.savez_compressed(f"{OUT}/frame_{i:04d}.npz", t=t, img=img, cloud=cloud, path=path)
 
 rospy.init_node("rich_capture", anonymous=True)
-rospy.Subscriber("/vi_dso/image_points", Image, img_cb, queue_size=2)
-rospy.Subscriber("/vi_dso/cloud", PointCloud2, cloud_cb, queue_size=2)
-rospy.Subscriber("/vi_dso/path", Path, path_cb, queue_size=2)
+rospy.Subscriber(IMG_TOPIC, Image, img_cb, queue_size=2)
+rospy.Subscriber(CLOUD_TOPIC, PointCloud2, cloud_cb, queue_size=2)
+rospy.Subscriber(PATH_TOPIC, Path, path_cb, queue_size=2)
 rospy.Timer(rospy.Duration(0.4), snap)   # ~2.5 fps capture
 rospy.spin()
 print("captured", img_count[0], "frames to", OUT)

@@ -9,6 +9,13 @@ from matplotlib.animation import FFMpegWriter
 CAP = sys.argv[1]                 # capture dir
 OUTMP4 = sys.argv[2]              # output mp4
 TITLE = sys.argv[3] if len(sys.argv) > 3 else ""
+# frame: "camera" (vi_dso: Z forward, Y down -> top-down = X-Z) or
+#        "world"  (graph: gravity-aligned, Z up   -> top-down = X-Y)
+FRAME = sys.argv[4] if len(sys.argv) > 4 else "camera"
+HA, VA = (2, 0) if FRAME == "camera" else (0, 1)   # horiz axis (forward), vert axis (lateral)
+HLAB = "forward Z (m)" if FRAME == "camera" else "X (m)"
+VLAB = "lateral X (m)" if FRAME == "camera" else "Y (m)"
+UPCOL = 1 if FRAME == "camera" else 2              # colour cloud by the remaining (height) axis
 GT = '/media/shu/disk_1tb/DatasetPaperReview/NOV/easy_AprilAdd/refined_odometry.csv'
 
 files = sorted(glob.glob(f"{CAP}/frame_*.npz"))
@@ -36,8 +43,8 @@ for f in files:
     if len(d["cloud"]): allc.append(d["cloud"])
     if len(d["path"]) > len(last_path): last_path = d["path"]
 allc = np.vstack(allc) if allc else np.zeros((1, 3))
-cz = np.percentile(allc[:, 2], [1, 99])   # forward extent
-cx = np.percentile(allc[:, 0], [1, 99])   # lateral extent
+cz = np.percentile(allc[:, HA], [1, 99])   # horizontal (forward) extent
+cx = np.percentile(allc[:, VA], [1, 99])   # vertical (lateral) extent
 
 # image panel on the left (its natural 4:3), map + trajectory stacked on the right
 fig = plt.figure(figsize=(15, 7))
@@ -55,19 +62,19 @@ with writer.saving(fig, OUTMP4, dpi=80):
         axi.clear(); axc.clear(); axt.clear()
         # left: selected-points image
         axi.imshow(img); axi.set_title("selected points (inv-depth colour)"); axi.axis('off')
-        # top-right: sparse map, robot bird's-eye (forward Z ->, lateral X up), colour = height
+        # top-right: sparse map, robot bird's-eye
         if len(cloud):
-            axc.scatter(cloud[:, 2], cloud[:, 0], s=1, c=-cloud[:, 1], cmap='viridis')
-        axc.set_title("sparse map (top-down: forward →)"); axc.set_aspect('equal')
+            axc.scatter(cloud[:, HA], cloud[:, VA], s=1, c=cloud[:, UPCOL], cmap='viridis')
+        axc.set_title("sparse map (top-down)"); axc.set_aspect('equal')
         axc.set_xlim(cz); axc.set_ylim(cx); axc.grid(alpha=0.3)
-        axc.set_xlabel("forward Z (m)"); axc.set_ylabel("lateral X (m)")
+        axc.set_xlabel(HLAB); axc.set_ylabel(VLAB)
         # bottom-right: trajectory, same bird's-eye
         if len(path):
-            axt.plot(path[:, 2], path[:, 0], '-', color='tab:blue', lw=2, label='estimate')
-            axt.plot(path[-1, 2], path[-1, 0], 'o', color='red')
-        axt.set_title("trajectory (top-down: forward →)"); axt.set_aspect('equal')
+            axt.plot(path[:, HA], path[:, VA], '-', color='tab:blue', lw=2, label='estimate')
+            axt.plot(path[-1, HA], path[-1, VA], 'o', color='red')
+        axt.set_title("trajectory (top-down)"); axt.set_aspect('equal')
         axt.grid(alpha=0.3); axt.legend(loc='upper right')
-        axt.set_xlabel("forward Z (m)"); axt.set_ylabel("lateral X (m)")
+        axt.set_xlabel(HLAB); axt.set_ylabel(VLAB)
         writer.grab_frame()
 plt.close(fig)
 print("wrote", OUTMP4, "from", len(files), "frames")
