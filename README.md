@@ -30,12 +30,12 @@ independent executables in one package — build once, run either.
 One complete, standalone launch file per mode (each starts the node + RViz):
 
 ```bash
-roslaunch polytunnel_vio stereo.launch        # RECOMMENDED — metric, range-gated stereo
-roslaunch polytunnel_vio mono.launch          # pure vision, best shape, scale-free
-roslaunch polytunnel_vio mono_graph.launch    # mono + IMU loose fusion (gravity-aligned metric)
-roslaunch polytunnel_vio stereo_graph.launch  # stereo + IMU loose fusion (no scale state)
-roslaunch polytunnel_vio mono_imu.launch      # tightly-coupled VI  — marginal, not recommended
-roslaunch polytunnel_vio stereo_imu.launch    # tightly-coupled stereo-VI — not recommended
+roslaunch polytunnel_vio stereo.launch        
+roslaunch polytunnel_vio mono.launch          
+roslaunch polytunnel_vio mono_graph.launch    # mono + IMU loose fusion
+roslaunch polytunnel_vio stereo_graph.launch  # stereo + IMU loose fusion
+roslaunch polytunnel_vio mono_imu.launch      # tightly-coupled VI
+roslaunch polytunnel_vio stereo_imu.launch    # tightly-coupled stereo-VI
 
 # then, in another terminal:
 rosbag play easy_AprilAdd_tffix.bag
