@@ -31,9 +31,9 @@ OUT = sys.argv[3]
 NAME = sys.argv[4] if len(sys.argv) > 4 else "dense_showcase.gif"
 TMP = "/tmp/showcaseframes"
 FPS = 6          # input sequence rate; NOT an output resample (see encode below)
-WIDTH = 780
-KEEP_EVERY = 2   # capture runs at 2.5 Hz, so consecutive frames barely differ
-COLORS = 128     # palette cap; together with KEEP_EVERY keeps the GIF ~8 MB
+WIDTH = 1280
+KEEP_EVERY = 3   # capture runs at 2.5 Hz, so consecutive frames barely differ
+COLORS = 112     # palette cap; with KEEP_EVERY this holds the GIF size down
 
 os.makedirs(OUT, exist_ok=True)
 shutil.rmtree(TMP, ignore_errors=True)
@@ -84,13 +84,13 @@ Cs, Ps = final_extent(sfiles)
 Cm, Pm = final_extent(mfiles)
 allpts = np.vstack([p for p in (Cs, Cm, Ps, Pm) if len(p)])
 xl = np.percentile(allpts[:, 0], [0.5, 99.5])
-yl = np.percentile(allpts[:, 1], [0.5, 99.5])
-zl = np.percentile(allpts[:, 2], [1.0, 99.0])
+yl = np.percentile(allpts[:, 1], [3.0, 97.0])
+zl = np.percentile(allpts[:, 2], [3.0, 97.0])
 print("scene extent  x %.1f..%.1f  y %.1f..%.1f  z %.1f..%.1f"
       % (xl[0], xl[1], yl[0], yl[1], zl[0], zl[1]))
 
 
-def draw_cloud(ax, cloud, rgb, path, title, npts=20000, xlim=None):
+def draw_cloud(ax, cloud, rgb, path, title, npts=45000, xlim=None, sparse=None):
     """Colour by the cloud's own RGB when it has any, else by height.
 
     This used to be height-only on purpose: DSO tracks on greyscale, so every
@@ -99,6 +99,9 @@ def draw_cloud(ax, cloud, rgb, path, title, npts=20000, xlim=None):
     keyframe, so the true colour is available and reads the scene far better
     than a turbo ramp. The height fallback stays for captures recorded before
     that, and for runs with ~colorize false.
+
+    `sparse` (the DSO map, vi_dso/cloud) is overlaid on top as bright accent
+    points so the dense reconstruction is visibly built on the DSO skeleton.
     """
     ax.set_facecolor("#111111")
     C = disp(cloud)
@@ -119,6 +122,18 @@ def draw_cloud(ax, cloud, rgb, path, title, npts=20000, xlim=None):
             ax.scatter(C[:, 0], C[:, 1], C[:, 2], s=1.4, c=C[:, 2],
                        cmap="turbo", vmin=zl[0], vmax=zl[1],
                        marker=".", linewidths=0, depthshade=False)
+
+    # DSO sparse map on top. Kept deliberately faint and thin: the dense cloud
+    # is the subject, and the sparse layer is ~120k points, so drawing it big
+    # and opaque buries the reconstruction under the skeleton. Cyan because the
+    # scene colours are warm (brown soil, white plastic), so it separates
+    # without competing.
+    if sparse is not None and len(sparse):
+        S = disp(sparse)
+        if len(S) > 3500:
+            S = S[np.random.default_rng(1).choice(len(S), 3500, replace=False)]
+        ax.scatter(S[:, 0], S[:, 1], S[:, 2], s=1.0, c="#5fd8ff",
+                   marker=".", linewidths=0, depthshade=False, alpha=0.45)
     P = disp(path)
     if len(P):
         ax.plot(P[:, 0], P[:, 1], P[:, 2], color="#ff2200", linewidth=2.6)
@@ -131,10 +146,13 @@ def draw_cloud(ax, cloud, rgb, path, title, npts=20000, xlim=None):
     # they are small and constant, so only the forward axis needs to move.
     xw = xl if xlim is None else np.asarray(xlim)
     ax.set_xlim(xw); ax.set_ylim(yl); ax.set_zlim(zl)
-    # true ground-plane proportions, vertical exaggerated so the corridor
-    # does not render as a flat pancake (same trick as make_gifs.py)
+    # Proportions: the lateral/vertical exaggeration used to be 2.2/2.6, which
+    # inflated the box far beyond the points and left most of the panel empty -
+    # the cloud rendered small even at high dpi. The corridor is ~34 m long and
+    # only a few metres across, so a mild lift is enough to avoid a pancake
+    # while keeping the points filling the frame.
     try:
-        ax.set_box_aspect((xw.ptp(), yl.ptp() * 2.2, max(zl.ptp(), 1) * 2.6))
+        ax.set_box_aspect((xw.ptp(), yl.ptp() * 1.25, max(zl.ptp(), 1) * 1.5))
     except Exception:
         pass
     ax.grid(False)
@@ -145,7 +163,7 @@ def draw_cloud(ax, cloud, rgb, path, title, npts=20000, xlim=None):
         a.set_ticklabels([])
     ax.set_title(title, color="#dddddd", fontsize=11, pad=-4)
     ax.view_init(elev=16, azim=-78)
-    ax.dist = 7.2          # pull the camera in; matplotlib's default wastes the frame
+    ax.dist = 6.0          # pull the camera in; matplotlib default wastes the frame
 
 
 for i in range(N):
@@ -170,14 +188,14 @@ for i in range(N):
     ax1 = fig.add_axes([-0.02, 0.47, 0.54, 0.46], projection="3d",
                        facecolor="#111111")
     draw_cloud(ax1, zs["cloud"], zs["rgb"], zs["path"],
-               "trajectory in STEREO dense cloud  (%d pts)" % len(zs["cloud"]),
-               xlim=xwin)
+               "STEREO dense + DSO sparse  (%d pts)" % len(zs["cloud"]),
+               xlim=xwin, sparse=zs["sparse"] if "sparse" in zs else None)
 
     ax2 = fig.add_axes([0.48, 0.47, 0.54, 0.46], projection="3d",
                        facecolor="#111111")
     draw_cloud(ax2, zm["cloud"], zm["rgb"], zm["path"],
-               "trajectory in MVSNET dense cloud  (%d pts)" % len(zm["cloud"]),
-               xlim=xwin)
+               "MVSNET dense + DSO sparse  (%d pts)" % len(zm["cloud"]),
+               xlim=xwin, sparse=zm["sparse"] if "sparse" in zm else None)
 
     ax3 = fig.add_axes([0.045, 0.02, 0.42, 0.44])
     raw = zm["raw"]
@@ -199,7 +217,7 @@ for i in range(N):
 
     fig.text(0.5, 0.985, "polytunnel dense reconstruction   t = %.0f s" % t,
              color="#777777", fontsize=10, ha="center")
-    fig.savefig(os.path.join(TMP, "f_%04d.png" % i), facecolor="#111111", dpi=80)
+    fig.savefig(os.path.join(TMP, "f_%04d.png" % i), facecolor="#111111", dpi=112)
     plt.close(fig)
 
     if (i + 1) % 20 == 0:

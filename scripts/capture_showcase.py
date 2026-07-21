@@ -21,7 +21,8 @@ RATE = float(sys.argv[2]) if len(sys.argv) > 2 else 2.5
 os.makedirs(OUT, exist_ok=True)
 
 lock = threading.Lock()
-state = {"cloud": None, "rgb": None, "path": None, "raw": None, "feat": None}
+state = {"cloud": None, "rgb": None, "sparse": None,
+         "path": None, "raw": None, "feat": None}
 count = [0]
 
 
@@ -41,6 +42,24 @@ def cloud_cb(m):
     with lock:
         state["cloud"] = xyz[ok]
         state["rgb"] = rgb[ok] if rgb is not None else None
+
+
+def sparse_cb(m):
+    """Sparse DSO map (vi_dso/cloud): XYZ only, world frame, backend-independent.
+
+    Overlaid on the dense cloud in the GIF so you can see the DSO skeleton the
+    dense reconstruction is built on top of. Same world frame as the dense
+    cloud, so no transform is needed.
+    """
+    if m.point_step < 12:
+        return
+    n = m.width * m.height
+    if n == 0:
+        return
+    xyz = np.frombuffer(m.data, np.uint8).reshape(n, m.point_step)[:, :12] \
+        .copy().view(np.float32).reshape(n, 3)
+    with lock:
+        state["sparse"] = xyz[np.isfinite(xyz).all(1)]
 
 
 def path_cb(m):
@@ -79,6 +98,7 @@ def snap(_):
             return
         cloud = state["cloud"]
         rgb = state["rgb"]
+        sparse = state["sparse"] if state["sparse"] is not None else np.zeros((0, 3), np.float32)
         path = state["path"] if state["path"] is not None else np.zeros((0, 3))
         raw = state["raw"]
         feat = state["feat"] if state["feat"] is not None else np.zeros((0, 0, 3), np.uint8)
@@ -88,11 +108,12 @@ def snap(_):
         os.path.join(OUT, "frame_%04d.npz" % i),
         t=rospy.Time.now().to_sec(), cloud=cloud,
         rgb=rgb if rgb is not None else np.zeros((0, 3), np.uint8),
-        path=path, raw=raw, feat=feat)
+        sparse=sparse, path=path, raw=raw, feat=feat)
 
 
 rospy.init_node("capture_showcase", anonymous=True)
 rospy.Subscriber("/dense_mapping/cloud", PointCloud2, cloud_cb, queue_size=1)
+rospy.Subscriber("/vi_dso/cloud", PointCloud2, sparse_cb, queue_size=1)
 rospy.Subscriber("/vi_dso/path", Path, path_cb, queue_size=2)
 rospy.Subscriber("/vi_dso/image_raw", Image, raw_cb, queue_size=2)
 rospy.Subscriber("/vi_dso/image_points", Image, feat_cb, queue_size=2)
