@@ -1,0 +1,9 @@
+<launch>
+  <!-- DENSE, UniMVSNet backend. Learned multi-view stereo over the DSO sliding
+       window (keyframe baselines ~0.30 m, roughly 2x the stereo rig's 0.14 m).
+       Runs ~5 Hz on an RTX 3060 Ti, ~1.1 GB VRAM. -->
+  <include file="$(find polytunnel_vio)/launch/dense.launch">
+    <arg name="mode"    value="stereo"/>
+    <arg name="backend" value="unimvsnet"/>
+  </include>
+</launch>

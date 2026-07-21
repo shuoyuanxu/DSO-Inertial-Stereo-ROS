@@ -56,6 +56,7 @@
 #include <nav_msgs/Odometry.h>
 #include <cv_bridge/cv_bridge.h>
 #include <opencv2/imgcodecs.hpp>
+#include <polytunnel_vio/SlidingWindowsMsg.h>
 
 #include <map>
 
@@ -69,6 +70,7 @@ using namespace dso;
 //   vi_dso/image_raw    sensor_msgs/Image mono8    undistorted live frame fed to DSO
 //   vi_dso/image_points sensor_msgs/Image bgr8     tracking-ref KF with selected points (jet-colored by inverse depth)
 //   vi_dso/cloud        sensor_msgs/PointCloud2    sparse map (active+marginalized points of all KFs), world frame
+//   vi_dso/sliding_window dso_dense_msgs/SlidingWindowsMsg  one msg per KF in the window, for dense MVS
 class ROSOutputWrapper : public IOWrap::Output3DWrapper
 {
 public:
@@ -81,6 +83,8 @@ public:
 		pubImgPts= nh.advertise<sensor_msgs::Image>("vi_dso/image_points", 2);
 		pubCloud = nh.advertise<sensor_msgs::PointCloud2>("vi_dso/cloud", 2);
 		pubKfCloud = nh.advertise<sensor_msgs::PointCloud2>("vi_dso/kf_cloud", 20);
+		// queue must hold at least a full window, or the MVS node never assembles one
+		pubWindow = nh.advertise<polytunnel_vio::SlidingWindowsMsg>("vi_dso/sliding_window", 64);
 		path.header.frame_id = "world";
 	}
 
@@ -210,6 +214,8 @@ public:
 			}
 		}
 
+		publishSlidingWindow(frames, HCalib);
+
 		if(pubCloud.getNumSubscribers() == 0 && !alwaysPublishImages) return;
 
 		sensor_msgs::PointCloud2 pc;
@@ -247,6 +253,105 @@ public:
 		pubCloud.publish(pc);
 	}
 
+	// One SlidingWindowsMsg per keyframe in the current window, all sharing msg_id.
+	// This is what the dense (MVS / stereo) depth node consumes: it needs the image
+	// DSO actually optimized together with that frame's own pose, which neither
+	// pushLiveFrame (latest frame, not a KF) nor pubKfCloud (points, no image) gives.
+	void publishSlidingWindow(std::vector<FrameHessian*>& frames, CalibHessian* HCalib)
+	{
+		if(pubWindow.getNumSubscribers() == 0) return;
+		if(frames.empty() || frames.size() > 255) return;
+
+		// Sim3 world alignment, split so the pose stays a *rigid* transform:
+		// an MVS plane sweep needs an orthonormal rotation block, so the scale
+		// goes into the translation only. Depths then come out already metric.
+		const double s = T_WD.scale();
+		if(!std::isfinite(s) || s <= 0) return;
+		const Eigen::Matrix3d R_WD = T_WD.rxso3().matrix() / s;
+		const Eigen::Vector3d t_WD = T_WD.translation();
+
+		// Plane-sweep depth range from DSO's own sparse depths over the whole
+		// window (metric). The reference implementation hardcoded 0.01-10 m,
+		// which is wrong for any rig but the one it was tuned on.
+		std::vector<float> depths;
+		for(FrameHessian* fh : frames)
+		{
+			auto it = clouds.find(fh->frameID);
+			if(it == clouds.end()) continue;
+			for(const Eigen::Vector3f& p : it->second.pts)
+				if(p.z() > 0 && std::isfinite(p.z())) depths.push_back(p.z() * (float)s);
+		}
+		if(depths.size() < 32) return;   // too few points to trust a range yet
+		std::sort(depths.begin(), depths.end());
+		float dmin = depths[(size_t)(0.05 * (depths.size()-1))];
+		float dmax = depths[(size_t)(0.95 * (depths.size()-1))];
+		// widen past the sparse envelope: MVS should be able to find structure
+		// DSO's point selector skipped, and a too-tight range clips it silently
+		dmin *= 0.7f;
+		dmax *= 1.4f;
+		if(!std::isfinite(dmin) || !std::isfinite(dmax) || dmax <= dmin) return;
+		if(dmin < 0.05f) dmin = 0.05f;
+
+		// count usable views FIRST: window_size must equal the number actually
+		// published, or the subscriber blocks forever waiting for a frame whose
+		// image was already freed
+		size_t nValid = 0;
+		for(FrameHessian* fh : frames) if(fh->dI != 0) nValid++;
+		if(nValid < 2) return;   // a plane sweep needs a reference plus a source
+
+		const int w = wG[0], h = hG[0];
+		const uint64_t id = ++windowId;
+		uint8_t idx = 0;
+		for(FrameHessian* fh : frames)
+		{
+			if(fh->dI == 0) continue;   // image freed; can't use it as an MVS view
+
+			polytunnel_vio::SlidingWindowsMsg m;
+			m.msg_id = id;
+			m.window_size = (uint8_t)nValid;
+			m.index = idx++;
+			m.depth_min = dmin;
+			m.depth_max = dmax;
+
+			auto it = clouds.find(fh->frameID);
+			double stamp = (it != clouds.end()) ? it->second.stamp : 0;
+			m.image.header.stamp = stamp > 0 ? ros::Time(stamp) : lastStamp;
+			m.image.header.frame_id = "camera";
+			m.image.width = w; m.image.height = h;
+			m.image.encoding = "mono8";       // cv_bridge widens to bgr8 downstream
+			m.image.step = w;
+			m.image.data.resize(w*h);
+			for(int i = 0; i < w*h; i++)
+			{
+				float v = fh->dI[i][0];
+				m.image.data[i] = (unsigned char)(v < 0 ? 0 : (v > 255 ? 255 : v));
+			}
+
+			// rigid metric cam->world, row-major, consistent with vi_dso/cloud:
+			// p_world = R * p_cam + t
+			const SE3& cw = fh->shell->camToWorld;
+			Eigen::Matrix3d R = R_WD * cw.rotationMatrix();
+			Eigen::Vector3d t = s * (R_WD * cw.translation()) + t_WD;
+			for(int r = 0; r < 3; r++)
+			{
+				for(int c = 0; c < 3; c++) m.camToWorld[4*r + c] = R(r,c);
+				m.camToWorld[4*r + 3] = t(r);
+			}
+			m.camToWorld[12] = 0; m.camToWorld[13] = 0;
+			m.camToWorld[14] = 0; m.camToWorld[15] = 1;
+
+			// level-0 intrinsics, already in pixels of the published image
+			m.Intrinsics[0] = HCalib->fxl();
+			m.Intrinsics[1] = HCalib->fyl();
+			m.Intrinsics[2] = HCalib->cxl();
+			m.Intrinsics[3] = HCalib->cyl();
+
+			pubWindow.publish(m);
+		}
+		ROS_INFO_THROTTLE(5.0, "sliding_window %lu: %u KFs, depth %.2f-%.2f m (scale %.3f)",
+		                  (unsigned long)id, idx, dmin, dmax, s);
+	}
+
 	virtual void reset() override
 	{
 		path.poses.clear();
@@ -267,6 +372,8 @@ private:
 	std::map<int, KFCloud, std::less<int>,
 	         Eigen::aligned_allocator<std::pair<const int, KFCloud>>> clouds;
 	ros::Publisher pubPose, pubOdom, pubPath, pubImg, pubImgPts, pubCloud, pubKfCloud;
+	ros::Publisher pubWindow;
+	uint64_t windowId = 0;
 	nav_msgs::Path path;
 	ros::Time lastStamp;
 };

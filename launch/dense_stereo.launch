@@ -1,0 +1,9 @@
+<launch>
+  <!-- DENSE, classical stereo backend. Uses the rig's calibrated pair
+       (baseline 0.1395 m) instead of a network: metric by construction and
+       ~11 Hz, but a short baseline resolves little at range. -->
+  <include file="$(find polytunnel_vio)/launch/dense.launch">
+    <arg name="mode"    value="stereo"/>
+    <arg name="backend" value="stereo"/>
+  </include>
+</launch>

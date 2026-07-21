@@ -1,0 +1,49 @@
+<launch>
+  <!-- Shared base for the dense reconstruction modes. You normally launch a
+       per-mode file (dense_mvsnet.launch, dense_stereo.launch) which includes
+       this with the right args, exactly like vi_dso.launch for the odometry.
+
+       Play data with:  rosbag play easy_AprilAdd_tffix.bag
+
+       Stack: vi_dso_live -> dense_depth_node.py -> dense_mapping_node -> RViz -->
+
+  <!-- which DSO mode feeds the pipeline: stereo is metric, mono is scale-free -->
+  <arg name="mode"    default="stereo"/>
+  <!-- which depth backend: unimvsnet | stereo -->
+  <arg name="backend" default="unimvsnet"/>
+  <arg name="rviz"    default="true"/>
+
+  <!-- UniMVSNet returns a real probability; the stereo backend returns a
+       range-based proxy. 0.5 keeps roughly the better half of both. -->
+  <arg name="conf_threshold" default="0.5"/>
+  <arg name="resolution"     default="0.05"/>
+  <arg name="max_depth"      default="15.0"/>
+  <arg name="pixel_step"     default="2"/>
+
+  <include file="$(find polytunnel_vio)/launch/vi_dso.launch">
+    <arg name="mode" value="$(arg mode)"/>
+    <arg name="rviz" value="false"/>   <!-- one RViz for the whole stack, below -->
+  </include>
+
+  <node name="dense_depth" pkg="polytunnel_vio" type="dense_depth_node.py" output="screen">
+    <param name="backend" value="$(arg backend)"/>
+    <!-- a plane sweep over views sharing a camera centre returns confident
+         nonsense, and DSO's first windows are exactly that -->
+    <param name="min_views"    value="3"/>
+    <param name="min_baseline" value="0.05"/>
+    <param name="left_topic"   value="/forwardLeft/image_raw/compressed"/>
+    <param name="right_topic"  value="/forwardRight/image_raw/compressed"/>
+    <param name="calib_dir"    value="$(find polytunnel_vio)/calib/polytunnel"/>
+  </node>
+
+  <node name="dense_mapping" pkg="polytunnel_vio" type="dense_mapping_node" output="screen">
+    <param name="resolution"     value="$(arg resolution)"/>
+    <param name="conf_threshold" value="$(arg conf_threshold)"/>
+    <param name="max_depth"      value="$(arg max_depth)"/>
+    <param name="pixel_step"     value="$(arg pixel_step)"/>
+    <param name="publish_period" value="1.0"/>
+  </node>
+
+  <node if="$(arg rviz)" name="rviz" pkg="rviz" type="rviz"
+        args="-d $(find polytunnel_vio)/rviz/dense.rviz"/>
+</launch>

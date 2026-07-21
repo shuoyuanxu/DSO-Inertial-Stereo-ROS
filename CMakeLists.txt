@@ -2,14 +2,29 @@ cmake_minimum_required(VERSION 3.5)
 project(polytunnel_vio)
 
 # ---------------------------------------------------------------------------
-# One ROS package, three build targets:
+# One ROS package, four build targets:
 #   dso_core            static lib  - the (patched) direct Stereo/VI-DSO core
 #   vi_dso_live         node        - live 4-mode wrapper (links dso_core)
 #   dso_imu_graph_node  node        - GTSAM factor-graph fusion (links gtsam)
+#   dense_mapping_node  node        - fuses dense depth into a global cloud (PCL)
+#
+# The dense reconstruction stage also ships:
+#   msg/               - SlidingWindowsMsg (DSO -> MVS), DepthMsg (MVS -> mapper)
+#   include/MVS/       - the MVS engine, alongside the DSO core in include/
+#   models/            - UniMVSNet pretrained checkpoints
+#   scripts/dense_depth_node.py - the depth node (UniMVSNet | stereo backends)
 # ---------------------------------------------------------------------------
 
 find_package(catkin REQUIRED COMPONENTS
-  roscpp sensor_msgs geometry_msgs nav_msgs std_msgs cv_bridge)
+  roscpp rospy sensor_msgs geometry_msgs nav_msgs std_msgs cv_bridge
+  message_generation pcl_ros pcl_conversions)
+
+add_message_files(
+  FILES
+  SlidingWindowsMsg.msg
+  DepthMsg.msg
+)
+generate_messages(DEPENDENCIES std_msgs sensor_msgs)
 
 # --- system config-mode packages FIRST, before the core's old Find*.cmake
 #     modules go on the module path (GTSAM needs the modern Eigen3::Eigen target
@@ -30,7 +45,7 @@ endif()
 find_package(OpenCV REQUIRED)
 find_package(Glog REQUIRED)
 
-catkin_package()
+catkin_package(CATKIN_DEPENDS message_runtime std_msgs sensor_msgs)
 
 add_definitions("-DENABLE_SSE")
 
@@ -93,6 +108,8 @@ target_include_directories(vi_dso_live PRIVATE
 target_link_libraries(vi_dso_live
   dso_core ${catkin_LIBRARIES} ${Pangolin_LIBRARIES} ${OpenCV_LIBS}
   ${GLOG_LIBRARY} ${Boost_LIBRARIES} cxsparse)
+# our own message headers must be generated before this compiles
+add_dependencies(vi_dso_live ${PROJECT_NAME}_generate_messages_cpp)
 
 # ===========================================================================
 # dso_imu_graph_node : GTSAM fusion (NO -march=native — GTSAM Eigen ABI; C++17)
@@ -102,3 +119,25 @@ target_compile_options(dso_imu_graph_node PRIVATE -O2 -g -std=c++17)
 target_include_directories(dso_imu_graph_node PRIVATE
   ${catkin_INCLUDE_DIRS} ${GTSAM_INCLUDE_DIR} ${EIGEN3_INCLUDE_DIR})
 target_link_libraries(dso_imu_graph_node ${catkin_LIBRARIES} gtsam)
+add_dependencies(dso_imu_graph_node ${PROJECT_NAME}_generate_messages_cpp)
+
+# ===========================================================================
+# dense_mapping_node : fuse dense depth into a global cloud (PCL; no -march=native)
+# ===========================================================================
+add_executable(dense_mapping_node src/dense_mapping_node.cpp)
+target_compile_options(dense_mapping_node PRIVATE -O2 -g -std=c++14)
+target_include_directories(dense_mapping_node PRIVATE
+  ${catkin_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR})
+target_link_libraries(dense_mapping_node ${catkin_LIBRARIES} ${OpenCV_LIBS})
+add_dependencies(dense_mapping_node ${PROJECT_NAME}_generate_messages_cpp)
+
+# ===========================================================================
+# python node + MVS engine
+# ===========================================================================
+catkin_install_python(PROGRAMS
+  scripts/dense_depth_node.py
+  scripts/capture_dense.py
+  scripts/make_dense_gif.py
+  scripts/capture_showcase.py
+  scripts/make_showcase_gif.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})

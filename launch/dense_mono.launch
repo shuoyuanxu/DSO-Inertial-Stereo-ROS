@@ -1,0 +1,8 @@
+<launch>
+  <!-- DENSE on monocular DSO. Best trajectory shape, but the map inherits
+       DSO's arbitrary scale - shape only, not metric. -->
+  <include file="$(find polytunnel_vio)/launch/dense.launch">
+    <arg name="mode"    value="mono"/>
+    <arg name="backend" value="unimvsnet"/>
+  </include>
+</launch>
