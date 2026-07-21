@@ -75,6 +75,7 @@ window into depth + confidence; the mapper fuses them into a global cloud.
 <img width="1080" height="755" alt="dense_showcase" src="https://github.com/user-attachments/assets/925868c2-bb75-4bb8-b05f-d3dd5d124845" />
 
 <img width="1000" height="267" alt="dense_unimvsnet" src="https://github.com/user-attachments/assets/820eba38-5ce7-431f-b329-b53e7881f686" />
+<img width="2345" height="745" alt="image" src="https://github.com/user-attachments/assets/b21324a3-46da-4e80-a59f-af73ce378d2f" />
 
 ```bash
 roslaunch polytunnel_vio dense_mvsnet.launch   # UniMVSNet multi-view stereo
