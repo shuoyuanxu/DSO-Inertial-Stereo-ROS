@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""GitHub-ready GIF of the dense depth stream: keyframe | depth | confidence.
+"""GitHub-ready GIF of the dense depth stream:
+keyframe | depth | confidence | what actually reaches the point cloud.
+
+The fourth panel is the one that matters for reading the reconstruction. The
+raw depth panel is 100% dense for a learned backend by construction - MVSNet
+softmaxes over depth hypotheses, so it cannot emit an invalid pixel, and a
+"valid 100%" caption says nothing about quality. dense_mapping then discards
+every pixel below conf_threshold or outside [min_depth, max_depth], which on
+this sequence is about two thirds of them. Showing only the raw panel makes the
+depth look worse than the resulting cloud and hides why.
 
 Same pipeline as polytunnel_vio/scripts/make_gifs.py - render PNGs, let ffmpeg
 palette them - so the output matches the existing README assets in look and size.
@@ -21,8 +30,17 @@ CAP = sys.argv[1]
 OUT = sys.argv[2]
 NAME = sys.argv[3] if len(sys.argv) > 3 else None
 TMP = "/tmp/denseframes"
-FPS = 8
-WIDTH = 900
+FPS = 6
+WIDTH = 1000
+# four panels at 8 fps runs to ~11 MB, which GitHub serves slowly and refuses
+# to inline past 10 MB. Every STRIDE-th frame at 6 fps keeps the same wall-clock
+# pace and the same content, at about a quarter of the bytes.
+STRIDE = 2
+
+# must match dense_mapping's gates, or the fourth panel is a lie
+CONF_THRESHOLD = 0.5
+MIN_DEPTH = 0.3
+MAX_DEPTH = 15.0
 
 os.makedirs(OUT, exist_ok=True)
 shutil.rmtree(TMP, ignore_errors=True)
@@ -36,7 +54,7 @@ for f in files:
         good.append(f)
     except Exception:
         pass                      # a frame written while we were reading it
-files = good
+files = good[::STRIDE]
 if not files:
     sys.exit("no frames in %s" % CAP)
 
@@ -60,13 +78,24 @@ for i, f in enumerate(files):
     fig, axes = plt.subplots(1, 3, figsize=(12, 3.2), facecolor="#111111")
     fig.subplots_adjust(left=0.01, right=0.99, top=0.88, bottom=0.02, wspace=0.04)
 
-    axes[0].imshow(img, cmap="gray", vmin=0, vmax=255)
-    axes[0].set_title("keyframe", color="#dddddd", fontsize=11)
+    if img.ndim == 3:
+        axes[0].imshow(img[:, :, ::-1])          # capture stores BGR
+        axes[0].set_title("keyframe (colour)", color="#dddddd", fontsize=11)
+    else:
+        axes[0].imshow(img, cmap="gray", vmin=0, vmax=255)
+        axes[0].set_title("keyframe", color="#dddddd", fontsize=11)
 
-    dm = np.ma.masked_where(depth <= 0, depth)
-    im = axes[1].imshow(dm, cmap="turbo", vmin=vmin, vmax=vmax)
-    valid = 100.0 * (depth > 0).mean()
-    axes[1].set_title("depth  %.1f-%.1f m   (valid %.0f%%)" % (vmin, vmax, valid),
+    finite = np.isfinite(depth) & (depth > 0)
+    kept = (finite & (conf >= CONF_THRESHOLD)
+            & (depth > MIN_DEPTH) & (depth < MAX_DEPTH))
+
+    dm = np.ma.masked_where(~finite, depth)
+    axes[1].imshow(dm, cmap="turbo", vmin=vmin, vmax=vmax)
+    # Caption both numbers. "non-zero" alone is meaningless for a learned
+    # backend (a softmax over depth hypotheses cannot emit an invalid pixel),
+    # and the second number is the one that decides what the cloud gets.
+    axes[1].set_title("depth  %.1f-%.1f m   non-zero %.0f%%,  %.0f%% into cloud"
+                      % (vmin, vmax, 100.0 * finite.mean(), 100.0 * kept.mean()),
                       color="#dddddd", fontsize=11)
 
     axes[2].imshow(conf, cmap="magma", vmin=0, vmax=1)

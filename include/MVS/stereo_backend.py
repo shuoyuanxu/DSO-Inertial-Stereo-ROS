@@ -82,11 +82,18 @@ class StereoBackend(object):
             rect_w=int(rospy.get_param("~rect_w", 1024)),
             rect_h=int(rospy.get_param("~rect_h", 768)),
             max_depth=float(rospy.get_param("~stereo_max_depth", 12.0)),
+            balance=float(rospy.get_param("~rect_balance", 1.0)),
+            fov_scale=float(rospy.get_param("~rect_fov_scale", 1.0)),
+            min_match_depth=float(rospy.get_param("~min_match_depth", 1.0)),
+            block_size=int(rospy.get_param("~block_size", 9)),
+            uniqueness_ratio=int(rospy.get_param("~uniqueness_ratio", 5)),
             max_time_diff=float(rospy.get_param("~max_time_diff", 0.02)))
 
     def __init__(self, calib_left, calib_right, t_stereo,
                  left_topic, right_topic, rect_w=1024, rect_h=768,
-                 max_depth=12.0, max_time_diff=0.02, buffer_len=400):
+                 max_depth=12.0, max_time_diff=0.02, buffer_len=400,
+                 balance=1.0, fov_scale=1.0, min_match_depth=1.0,
+                 block_size=9, uniqueness_ratio=5):
         _, K1, D1, size1 = read_dso_calib(calib_left)
         _, K2, D2, _ = read_dso_calib(calib_right)
 
@@ -105,10 +112,16 @@ class StereoBackend(object):
                       [0, 0, 1]], dtype=np.float64)
         K1s, K2s = s @ K1, s @ K2
 
+        # balance=0 crops the rectified image to the all-valid region, which
+        # zooms in to ~101 deg - narrower than the 115 deg DSO keyframe we have
+        # to resample into. A quarter of the keyframe then samples outside the
+        # rectified image and comes back as a hard-zero band on the left/right
+        # edges, in every frame. balance=1 keeps the full FOV instead; the outer
+        # ring is empty for the matcher but no keyframe pixel is lost.
         R1, R2, P1, P2, Q = cv2.fisheye.stereoRectify(
             K1s, D1, K2s, D2, self.rect_size, R, t,
             cv2.CALIB_ZERO_DISPARITY, newImageSize=self.rect_size,
-            balance=0.0, fov_scale=1.0)
+            balance=balance, fov_scale=fov_scale)
 
         self.R1 = R1
         self.K_rect = P1[:3, :3]
@@ -123,21 +136,35 @@ class StereoBackend(object):
         self.max_time_diff = max_time_diff
 
         # disparity search must cover the depth range we care about:
-        # disp = f * B / Z, so the nearest depth sets the widest disparity
-        min_depth = 0.5
-        num_disp = int(np.ceil(self.f_rect * self.baseline / min_depth / 16.0)) * 16
+        # disp = f * B / Z, so the nearest depth sets the widest disparity.
+        # It is not free: minDisparity=0 leaves the leftmost num_disp columns
+        # of the rectified image unmatchable, so asking for an unnecessarily
+        # close min depth buys nothing and costs FOV. 0.5 m is closer than this
+        # platform ever needs; 1.0 m halves the dead band.
+        num_disp = int(np.ceil(self.f_rect * self.baseline
+                               / min_match_depth / 16.0)) * 16
         num_disp = max(64, min(num_disp, 256))
+        # blockSize 9 / uniquenessRatio 5 rather than 5 / 10: a polytunnel is
+        # mostly untextured plastic and bare soil, and the tighter settings
+        # decline to match about half of it. Measured on a rectified pair from
+        # the polytunnel bag: 45.3% valid at 5/10, 55.7% at 9/5. The cost is a
+        # larger correlation window, so depth edges smooth out a little.
+        bs = int(block_size) | 1                      # SGBM requires odd
         self.matcher = cv2.StereoSGBM_create(
-            minDisparity=0, numDisparities=num_disp, blockSize=5,
-            P1=8 * 3 * 5 ** 2, P2=32 * 3 * 5 ** 2,
-            disp12MaxDiff=1, uniquenessRatio=10,
+            minDisparity=0, numDisparities=num_disp, blockSize=bs,
+            P1=8 * 3 * bs ** 2, P2=32 * 3 * bs ** 2,
+            disp12MaxDiff=1, uniquenessRatio=int(uniqueness_ratio),
             speckleWindowSize=100, speckleRange=2,
             mode=cv2.STEREO_SGBM_MODE_SGBM_3WAY)
 
+        hfov = 2.0 * np.degrees(np.arctan(0.5 * rect_w / self.f_rect))
         rospy.loginfo("stereo: baseline %.4f m, rect %dx%d, f_rect %.1f, "
-                      "numDisparities %d (min depth %.2f m)",
-                      self.baseline, rect_w, rect_h, self.f_rect,
-                      num_disp, self.f_rect * self.baseline / num_disp)
+                      "hfov %.1f deg (balance %.2f, fov_scale %.2f), "
+                      "numDisparities %d (min depth %.2f m, "
+                      "left dead band %d/%d cols)",
+                      self.baseline, rect_w, rect_h, self.f_rect, hfov,
+                      balance, fov_scale, num_disp,
+                      self.f_rect * self.baseline / num_disp, num_disp, rect_w)
 
         # raw image buffers, keyed by stamp
         self._lock = threading.Lock()

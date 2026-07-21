@@ -29,7 +29,9 @@ count = [0]
 def cb(m):
     depth = bridge.imgmsg_to_cv2(m.depth, "passthrough").astype(np.float32)
     conf = bridge.imgmsg_to_cv2(m.confidence, "passthrough").astype(np.float32)
-    img = bridge.imgmsg_to_cv2(m.image, "mono8")
+    # bgr8: dense_depth now resamples raw colour into the keyframe grid, and
+    # asking for mono8 would discard it before it ever reaches the GIF
+    img = bridge.imgmsg_to_cv2(m.image, "bgr8")
     with lock:
         latest["msg"] = (m.image.header.stamp.to_sec(), img.copy(),
                          depth.copy(), conf.copy(), m.backend,

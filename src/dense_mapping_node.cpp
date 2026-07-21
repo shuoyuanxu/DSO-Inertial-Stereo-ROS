@@ -111,7 +111,11 @@ private:
 	{
 		cv_bridge::CvImageConstPtr d = cv_bridge::toCvShare(msg->depth, msg, "32FC1");
 		cv_bridge::CvImageConstPtr c = cv_bridge::toCvShare(msg->confidence, msg, "32FC1");
-		cv_bridge::CvImagePtr      g = cv_bridge::toCvCopy(msg->image, "mono8");
+		// bgr8, not mono8: dense_depth resamples raw colour into the keyframe
+		// grid, and asking cv_bridge for mono8 would throw that away again.
+		// A grayscale keyframe (colorize off, or no colour frame in time)
+		// widens to bgr8 here, so this path handles both.
+		cv_bridge::CvImagePtr      g = cv_bridge::toCvCopy(msg->image, "bgr8");
 		if(d->image.empty() || c->image.empty()) return;
 
 		const double fx = msg->Intrinsics[0], fy = msg->Intrinsics[1];
@@ -131,14 +135,14 @@ private:
 		CloudT::Ptr kf(new CloudT);
 		kf->reserve((d->image.rows / pixelStep_) * (d->image.cols / pixelStep_));
 
-		const bool haveGray = (g->image.rows == d->image.rows &&
-		                       g->image.cols == d->image.cols);
+		const bool haveColor = (g->image.rows == d->image.rows &&
+		                        g->image.cols == d->image.cols);
 
 		for(int y = 0; y < d->image.rows; y += pixelStep_)
 		{
 			const float* dr = d->image.ptr<float>(y);
 			const float* cr = c->image.ptr<float>(y);
-			const unsigned char* gr = haveGray ? g->image.ptr<unsigned char>(y) : 0;
+			const cv::Vec3b* gr = haveColor ? g->image.ptr<cv::Vec3b>(y) : 0;
 			for(int x = 0; x < d->image.cols; x += pixelStep_)
 			{
 				const float z = dr[x];
@@ -151,8 +155,9 @@ private:
 
 				PointT pt;
 				pt.x = (float)w.x(); pt.y = (float)w.y(); pt.z = (float)w.z();
-				const unsigned char v = gr ? gr[x] : 200;
-				pt.r = v; pt.g = v; pt.b = v;
+				if(gr) { const cv::Vec3b& c = gr[x];      // OpenCV order is BGR
+				         pt.b = c[0]; pt.g = c[1]; pt.r = c[2]; }
+				else   { pt.r = pt.g = pt.b = 200; }
 				kf->push_back(pt);
 			}
 		}

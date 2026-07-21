@@ -90,31 +90,51 @@ print("scene extent  x %.1f..%.1f  y %.1f..%.1f  z %.1f..%.1f"
       % (xl[0], xl[1], yl[0], yl[1], zl[0], zl[1]))
 
 
-def draw_cloud(ax, cloud, rgb, path, title, npts=20000):
-    """Colour by height, NOT by the keyframe greyscale.
+def draw_cloud(ax, cloud, rgb, path, title, npts=20000, xlim=None):
+    """Colour by the cloud's own RGB when it has any, else by height.
 
-    The scene is a dim polytunnel, so its own intensities render as near-black
-    points on a dark background - invisible. Height gives contrast and also
-    reads the structure (ground vs the arched roof) at a glance.
+    This used to be height-only on purpose: DSO tracks on greyscale, so every
+    fused point came back r=g=b and a dim polytunnel rendered as near-black
+    points on a dark background. dense_depth now resamples real colour into the
+    keyframe, so the true colour is available and reads the scene far better
+    than a turbo ramp. The height fallback stays for captures recorded before
+    that, and for runs with ~colorize false.
     """
     ax.set_facecolor("#111111")
     C = disp(cloud)
+    col = np.asarray(rgb) if rgb is not None else np.zeros((0, 3))
+    have_rgb = len(col) == len(C) and len(col) > 0 and col.ptp() > 0
     if len(C) > npts:
-        C = C[np.random.default_rng(0).choice(len(C), npts, replace=False)]
+        idx = np.random.default_rng(0).choice(len(C), npts, replace=False)
+        C = C[idx]
+        if have_rgb:
+            col = col[idx]
     if len(C):
-        ax.scatter(C[:, 0], C[:, 1], C[:, 2], s=1.4, c=C[:, 2],
-                   cmap="turbo", vmin=zl[0], vmax=zl[1],
-                   marker=".", linewidths=0, depthshade=False)
+        if have_rgb:
+            # brighten: the tunnel is dim and a dark background eats it
+            c = np.clip(col.astype(np.float32) / 255.0 * 1.35, 0, 1)
+            ax.scatter(C[:, 0], C[:, 1], C[:, 2], s=1.4, c=c,
+                       marker=".", linewidths=0, depthshade=False)
+        else:
+            ax.scatter(C[:, 0], C[:, 1], C[:, 2], s=1.4, c=C[:, 2],
+                       cmap="turbo", vmin=zl[0], vmax=zl[1],
+                       marker=".", linewidths=0, depthshade=False)
     P = disp(path)
     if len(P):
         ax.plot(P[:, 0], P[:, 1], P[:, 2], color="#ff2200", linewidth=2.6)
         ax.scatter(P[-1, 0], P[-1, 1], P[-1, 2], s=45, c="#ffdd33", marker="o",
                    edgecolors="#000000", linewidths=0.5, depthshade=False)
-    ax.set_xlim(xl); ax.set_ylim(yl); ax.set_zlim(zl)
-    # true ground-plane proportions, vertical exaggerated so a ~50 m corridor
+    # Chase the camera: with the axis fixed to the full 111 m corridor, an
+    # early frame (a few metres of map) renders as a dot in an empty box. A
+    # forward window that follows the current position keeps the cloud filling
+    # the panel the whole way down the tunnel. Lateral/vertical stay fixed -
+    # they are small and constant, so only the forward axis needs to move.
+    xw = xl if xlim is None else np.asarray(xlim)
+    ax.set_xlim(xw); ax.set_ylim(yl); ax.set_zlim(zl)
+    # true ground-plane proportions, vertical exaggerated so the corridor
     # does not render as a flat pancake (same trick as make_gifs.py)
     try:
-        ax.set_box_aspect((xl.ptp(), yl.ptp() * 2.2, max(zl.ptp(), 1) * 2.6))
+        ax.set_box_aspect((xw.ptp(), yl.ptp() * 2.2, max(zl.ptp(), 1) * 2.6))
     except Exception:
         pass
     ax.grid(False)
@@ -135,19 +155,29 @@ for i in range(N):
     zs = np.load(sfiles[si])
     zm = np.load(mfiles[mi])
 
+    # shared forward window centred just behind the current camera, so both
+    # panels stay comparable and the accumulated trail is what fills the frame
+    tips = [disp(z["path"])[-1, 0] for z in (zs, zm) if len(z["path"])]
+    fwd = max(tips) if tips else xl[1]
+    SPAN, AHEAD = 34.0, 6.0                     # metres of trail, metres ahead
+    lo = max(xl[0], fwd - (SPAN - AHEAD))
+    xwin = np.array([lo, min(xl[1], lo + SPAN)])
+
     fig = plt.figure(figsize=(12, 8.4), facecolor="#111111")
 
     # explicit axes rects: matplotlib's 3d subplots leave most of their cell
     # empty, which on a 2x2 grid wastes half the GIF
     ax1 = fig.add_axes([-0.02, 0.47, 0.54, 0.46], projection="3d",
                        facecolor="#111111")
-    draw_cloud(ax1, zs["cloud"], None, zs["path"],
-               "trajectory in STEREO dense cloud  (%d pts)" % len(zs["cloud"]))
+    draw_cloud(ax1, zs["cloud"], zs["rgb"], zs["path"],
+               "trajectory in STEREO dense cloud  (%d pts)" % len(zs["cloud"]),
+               xlim=xwin)
 
     ax2 = fig.add_axes([0.48, 0.47, 0.54, 0.46], projection="3d",
                        facecolor="#111111")
-    draw_cloud(ax2, zm["cloud"], None, zm["path"],
-               "trajectory in MVSNET dense cloud  (%d pts)" % len(zm["cloud"]))
+    draw_cloud(ax2, zm["cloud"], zm["rgb"], zm["path"],
+               "trajectory in MVSNET dense cloud  (%d pts)" % len(zm["cloud"]),
+               xlim=xwin)
 
     ax3 = fig.add_axes([0.045, 0.02, 0.42, 0.44])
     raw = zm["raw"]

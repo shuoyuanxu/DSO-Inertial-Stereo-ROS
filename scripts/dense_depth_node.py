@@ -59,6 +59,7 @@ class DenseDepthNode(object):
         self._times = collections.deque(maxlen=50)
 
         self.backend = self._make_backend(pkg)
+        self.colorizer = self._make_colorizer(pkg)
 
         self.pub = rospy.Publisher("dense_depth/depth_info", DepthMsg, queue_size=10)
         self.sub = rospy.Subscriber("vi_dso/sliding_window", SlidingWindowsMsg,
@@ -88,6 +89,32 @@ class DenseDepthNode(object):
             return StereoBackend.from_params(pkg)
         raise ValueError("unknown ~backend %r (expected unimvsnet or stereo)"
                          % self.backend_name)
+
+    def _make_colorizer(self, pkg):
+        """Optional: resample raw colour into the keyframe so the cloud isn't gray.
+
+        DSO hands us a mono8 keyframe (it converts to grayscale before tracking),
+        so without this every fused point gets r=g=b. Failing to build it is not
+        fatal - the pipeline just stays grayscale, as before.
+        """
+        if not bool(rospy.get_param("~colorize", True)):
+            return None
+        try:
+            from MVS.colorizer import Colorizer
+            from MVS.stereo_backend import read_dso_calib
+            calib_dir = rospy.get_param(
+                "~calib_dir", os.path.join(pkg, "calib", "polytunnel"))
+            _, K, D, size = read_dso_calib(
+                rospy.get_param("~calib_left",
+                                os.path.join(calib_dir, "cam0.txt")))
+            return Colorizer(
+                K_raw=K, D=D, raw_size=size,
+                topic=rospy.get_param("~left_topic",
+                                      "/forwardLeft/image_raw/compressed"),
+                max_time_diff=float(rospy.get_param("~color_time_diff", 0.05)))
+        except Exception as e:
+            rospy.logwarn("colorize disabled (%s); cloud will be grayscale", e)
+            return None
 
     def on_window(self, msg):
         w = self.assembler.add(msg)
@@ -145,7 +172,16 @@ class DenseDepthNode(object):
         finite = np.isfinite(res.depth) & (res.depth > 0)
 
         m = DepthMsg()
+        # Colour is sampled on the depth map's own grid (res.K, res.depth shape),
+        # not the keyframe's, so it stays aligned even when the backend resized.
         m.image = ref.image
+        if self.colorizer is not None:
+            rgb = self.colorizer.lookup(
+                ref.image.header.stamp.to_sec(), res.K,
+                (res.depth.shape[1], res.depth.shape[0]))
+            if rgb is not None:
+                m.image = self.bridge.cv2_to_imgmsg(rgb, encoding="bgr8")
+                m.image.header = ref.image.header
         m.camToWorld = ref.camToWorld
         # K from the backend, not the message: the backend may have resized
         m.Intrinsics = [float(res.K[0, 0]), float(res.K[1, 1]),
