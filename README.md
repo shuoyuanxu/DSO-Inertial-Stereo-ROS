@@ -68,13 +68,17 @@ rosbag play your.bag
 
 ## Dense reconstruction
 
-Dense mapping on the same odometry, after
-[DSO + MVSNet](https://github.com/shuoyuanxu/Real-time-Pose-Estimation-and-Dense-Reconstruction-Based-on-DSO-and-MVSNet).
-`vi_dso_live` publishes each keyframe of its sliding window (image, rigid metric
-pose, intrinsics, depth range from its own sparse points); UniMVSNet turns each
+Dense mapping on the same odometry, after `vi_dso_live` publishes each keyframe of its sliding window 
+(image, rigid metric pose, intrinsics, depth range from its own sparse points); UniMVSNet turns each
 window into depth + confidence; the mapper fuses them into a global cloud.
 
-![dense showcase](readme_assets/dense_showcase.gif)
+<img width="780" height="546" alt="dense_showcase" src="https://github.com/user-attachments/assets/7457a28d-2efe-4e88-a5d9-24aa646a5723" />
+
+### Stereo
+<img width="900" height="240" alt="dense_stereo" src="https://github.com/user-attachments/assets/f8028305-5538-4529-94f4-3f12e7073d3b" />
+
+### UniMVSNet
+<img width="900" height="240" alt="dense_unimvsnet" src="https://github.com/user-attachments/assets/0b6f7669-a2a9-4635-8c3d-6b9e81d1183f" />
 
 ```bash
 roslaunch polytunnel_vio dense_mvsnet.launch   # UniMVSNet multi-view stereo
