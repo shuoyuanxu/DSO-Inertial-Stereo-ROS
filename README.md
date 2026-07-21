@@ -36,7 +36,7 @@ links PCL. All are independent executables in one package — build once, run an
 
 ## Modes
 
-One complete, standalone launch file per mode (each starts the node + RViz):
+One standalone launch file per mode (each starts the node + RViz):
 
 ```bash
 roslaunch polytunnel_vio stereo.launch        
@@ -47,18 +47,13 @@ roslaunch polytunnel_vio mono_imu.launch      # tightly-coupled VI
 roslaunch polytunnel_vio stereo_imu.launch    # tightly-coupled stereo-VI
 
 # then, in another terminal:
-rosbag play easy_AprilAdd_tffix.bag
+rosbag play your.bag
 ```
 
 For odometry **plus** a dense map, use the `dense_*` launches instead — see
 [Dense reconstruction](#dense-reconstruction).
 
 ## Results (polytunnel sequence, tag-map ground truth, ~343 s)
-
-Every visual system evaluated with one script (`scripts/eval_all_visual.py`): nearest-neighbour
-timestamp association, Umeyama alignment, SE3 (metric, honest) and Sim3 (shape only) ATE.
-`coverage` = how much of the sequence the system actually tracked — a low-ATE result over
-25 % of the run is not comparable to one over 100 %.
 
 | System | Modality | SE3 ATE | Sim3 ATE | scale | coverage |
 |---|---|---|---|---|---|
@@ -76,6 +71,7 @@ timestamp association, Umeyama alignment, SE3 (metric, honest) and Sim3 (shape o
 | OpenVINS | stereo-inertial | *diverged* | *diverged* | 0.00 | 100 % |
 | VINS-Fusion | stereo | *diverged* | *diverged* | 0.00 | 100 % |
 
+<<<<<<< HEAD
 Reading it honestly: **OpenVINS mono-inertial is the most accurate metric system** (0.63 m,
 full coverage) and our range-gated stereo is competitive at 1.22 m / 95 % without using the
 IMU at all. **Our mono has the best trajectory *shape* of any system tested** (Sim3 0.23 m,
@@ -250,6 +246,11 @@ in C++17 (GTSAM's Eigen ABI), and OpenCV is pinned to the system version cv_brid
 links against (mixing two OpenCVs in one process corrupts the heap).
 
 Dependencies: ROS noetic, Pangolin, GTSAM ≥ 4.2 (`CombinedImuFactor`), OpenCV (system),
+=======
+## Dependencies: 
+
+ROS noetic, Pangolin, GTSAM ≥ 4.2 (`CombinedImuFactor`), OpenCV (system),
+>>>>>>> e63be57eaeba60d1249a1e23af92c9b99d29c854
 Eigen3, Boost, SuiteSparse, glog.
 
 For the dense stage additionally: `pcl_ros` / `pcl_conversions` (mapper),
@@ -274,7 +275,7 @@ downloaded at run time.
   densities and random walks (Kalibr conventions)
 - `T_C0C1.txt` — 3×4 left←right stereo extrinsic
 
-## Key parameters (learned the hard way)
+## Key parameters 
 
 | Param | Default | Why |
 |---|---|---|
@@ -286,6 +287,7 @@ downloaded at run time.
 | `scale_rw_sigma` | 0.002 | scale random walk; larger values let scale chase IMU noise through unobservable stretches |
 | `odom_huber` | 1.345 | robust loss on odometry factors; disabling it measurably hurts |
 
+<<<<<<< HEAD
 Dense stage:
 
 | Param | Default | Why |
@@ -357,26 +359,23 @@ Dense stage:
 This work builds directly on:
 
 - **DSO** — J. Engel, V. Koltun, D. Cremers, *Direct Sparse Odometry*, IEEE TPAMI 2018.
+=======
+## This work builds directly on:
+
+- **DSO**
+>>>>>>> e63be57eaeba60d1249a1e23af92c9b99d29c854
   [github.com/JakobEngel/dso](https://github.com/JakobEngel/dso)
-- **Stereo DSO** — R. Wang, M. Schwörer, D. Cremers, *Stereo DSO: Large-Scale Direct
-  Sparse Visual Odometry with Stereo Cameras*, ICCV 2017.
-- **VI-DSO** — L. von Stumberg, V. Usenko, D. Cremers, *Direct Sparse Visual-Inertial
-  Odometry using Dynamic Marginalization*, ICRA 2018.
-- **VI-Stereo-DSO** — R. Sun's community implementation combining the above:
+- **VI-Stereo-DSO**
   [github.com/RonaldSun/VI-Stereo-DSO](https://github.com/RonaldSun/VI-Stereo-DSO)
   (included here in patched form, GPLv3)
-- **dso_ros** — J. Engel's ROS wrapper for DSO, the pattern our live wrapper follows:
+- **dso_ros**
   [github.com/JakobEngel/dso_ros](https://github.com/JakobEngel/dso_ros)
-- **GTSAM** — F. Dellaert et al., Georgia Tech Smoothing and Mapping library; IMU
-  preintegration after C. Forster, L. Carlone, F. Dellaert, D. Scaramuzza, *On-Manifold
-  Preintegration for Real-Time Visual-Inertial Odometry*, IEEE T-RO 2017.
+- **GTSAM** 
   [gtsam.org](https://gtsam.org)
-- **OKVIS2 / OKVIS2-X** — S. Leutenegger et al., whose estimator design (immediate
-  initialization without excitation gates, information-preserving marginalization,
-  physically-derived IMU weighting with config-level noise inflation, persistent bias
-  priors) guided the fusion layer and the initialization relaxations:
+- **OKVIS2 / OKVIS2-X**
   [github.com/smartroboticslab/okvis2](https://github.com/smartroboticslab/okvis2)
 
+<<<<<<< HEAD
 The dense reconstruction stage builds on:
 
 - **MVSNet** — Y. Yao, Z. Luo, S. Li, T. Fang, L. Quan, *MVSNet: Depth Inference
@@ -399,6 +398,8 @@ The dense reconstruction stage builds on:
 Baselines referenced in the results table: OpenVINS (Geneva et al.), ORB-SLAM3 (Campos
 et al.), VINS-Fusion (Qin et al.).
 
+=======
+>>>>>>> e63be57eaeba60d1249a1e23af92c9b99d29c854
 ## License
 
 GPLv3 — this repository contains and derives from DSO-family code, which is GPLv3.
